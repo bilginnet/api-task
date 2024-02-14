@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:latest
+    container_name: apitask-nginx
+    ports:
+      - '8000:80'
+    volumes:
+      - .:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - php
+    networks:
+      - apitask_network
+
+  php:
+    container_name: apitask-php
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        TARGET_ARCH: arm_target
+    volumes:
+      - ./:/var/www/html
+    ports:
+      - '9000:9000'
+    networks:
+      - apitask_network
+
+  db:
+    container_name: apitask-db
+    image: alpine:latest
+    volumes:
+      - ./testDb.db:/var/lib/sqlite/testDb.db
+      - ./database/structure.sql:/docker-entrypoint-initdb.d/structure.sql
+      - ./database/data.sql:/docker-entrypoint-initdb.d/data.sql
+    command: ["tail", "-f", "/dev/null"]  # SQLite servisinin çalışmasını sağlar
+    networks:
+      - apitask_network
+
+networks:
+  apitask_network:

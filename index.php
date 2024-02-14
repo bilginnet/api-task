@@ -16,7 +16,9 @@ class Api
 	{
 		self::$db = (new Database())->init();
 
-		$uri = strtolower(trim((string)$_SERVER['PATH_INFO'], '/'));
+		//$uri = strtolower(trim((string)$_SERVER['PATH_INFO'], '/'));
+		$uri = strtolower(trim(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), '/'));
+
 		$httpVerb = isset($_SERVER['REQUEST_METHOD']) ? strtolower($_SERVER['REQUEST_METHOD']) : 'cli';
 
 		$wildcards = [
@@ -37,6 +39,15 @@ class Api
 				'method' => 'post',
 				'bodyType' => 'ConstructionStagesCreate'
 			],
+			'patch constructionStages/(:num)' => [
+				'class' => 'ConstructionStages',
+				'method' => 'patch',
+				'bodyType' => 'ConstructionStagesUpdate'
+			],
+			'delete constructionStages/(:num)' => [
+				'class' => 'ConstructionStages',
+				'method' => 'delete',
+			],
 		];
 
 		$response = [
@@ -44,23 +55,33 @@ class Api
 		];
 
 		if ($uri) {
-
 			foreach ($routes as $pattern => $target) {
 				$pattern = str_replace(array_keys($wildcards), array_values($wildcards), $pattern);
 				if (preg_match('#^'.$pattern.'$#i', "{$httpVerb} {$uri}", $matches)) {
 					$params = [];
 					array_shift($matches);
-					if ($httpVerb === 'post') {
-						$data = json_decode(file_get_contents('php://input'));
-						$params = [new $target['bodyType']($data)];
+					try {
+						if (isset($target['bodyType']) && in_array($httpVerb, ['post', 'patch', 'put']) ) {
+							$data = json_decode(file_get_contents('php://input'));
+							if ($httpVerb !== 'post' && isset($matches[0])) {
+								$params = [new $target['bodyType']($data, (int)$matches[0])];
+							} else {
+								$params = [new $target['bodyType']($data)];
+							}
+						}
+						$params = array_merge($params, $matches);
+						$response = call_user_func_array([new $target['class'], $target['method']], $params);
+					} catch (Throwable $e) {
+						$response = ['error' => $e->getMessage()];
 					}
-					$params = array_merge($params, $matches);
-					$response = call_user_func_array([new $target['class'], $target['method']], $params);
 					break;
 				}
 			}
 
-			echo json_encode($response, JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);
+			//echo json_encode($response, JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);
+			$jsonResponse = json_encode($response, JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);
+			header('Content-Type: application/json');
+			print_r($jsonResponse);
 		}
 	}
 }
